@@ -14,6 +14,7 @@ import (
 type orderService interface {
 	Create(ctx context.Context, input usecase.CreateOrderInput) (domain.Order, bool, error)
 	GetByID(ctx context.Context, id string) (domain.Order, error)
+	GetRevenueByCustomerID(ctx context.Context, customerID string) (domain.Revenue, error)
 	Cancel(ctx context.Context, id string) (domain.Order, error)
 }
 
@@ -37,12 +38,19 @@ type orderResponse struct {
 	PaymentTransactionID string        `json:"payment_transaction_id,omitempty"`
 }
 
+type revenueResponse struct {
+	CustomerID  string `json:"customer_id"`
+	TotalAmount int64  `json:"total_amount"`
+	OrdersCount int64  `json:"orders_count"`
+}
+
 func NewHandler(service orderService, validator *validate.Validator) *Handler {
 	return &Handler{service: service, validator: validator}
 }
 
 func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /orders", h.createOrder)
+	mux.HandleFunc("GET /orders/revenue", h.getRevenue)
 	mux.HandleFunc("GET /orders/{id}", h.getOrder)
 	mux.HandleFunc("PATCH /orders/{id}/cancel", h.cancelOrder)
 }
@@ -104,6 +112,26 @@ func (h *Handler) getOrder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httpx.WriteJSON(w, http.StatusOK, mapOrder(order))
+}
+
+func (h *Handler) getRevenue(w http.ResponseWriter, r *http.Request) {
+	customerID := r.URL.Query().Get("customer_id")
+	if customerID == "" {
+		httpx.WriteError(w, http.StatusBadRequest, "customer_id query parameter is required")
+		return
+	}
+
+	revenue, err := h.service.GetRevenueByCustomerID(r.Context(), customerID)
+	if err != nil {
+		httpx.WriteError(w, http.StatusInternalServerError, "failed to load revenue")
+		return
+	}
+
+	httpx.WriteJSON(w, http.StatusOK, revenueResponse{
+		CustomerID:  revenue.CustomerID,
+		TotalAmount: revenue.TotalAmount,
+		OrdersCount: revenue.OrdersCount,
+	})
 }
 
 func (h *Handler) cancelOrder(w http.ResponseWriter, r *http.Request) {

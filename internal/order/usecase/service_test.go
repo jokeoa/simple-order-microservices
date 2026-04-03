@@ -11,6 +11,7 @@ type orderRepoStub struct {
 	created          []domain.Order
 	byID             map[string]domain.Order
 	byIdempotencyKey map[string]domain.Order
+	revenue          domain.Revenue
 	createErr        error
 }
 
@@ -46,6 +47,12 @@ func (s *orderRepoStub) GetByIdempotencyKey(_ context.Context, key string) (doma
 		return domain.Order{}, ErrNotFound
 	}
 	return order, nil
+}
+
+func (s *orderRepoStub) GetRevenueByCustomerID(_ context.Context, customerID string) (domain.Revenue, error) {
+	revenue := s.revenue
+	revenue.CustomerID = customerID
+	return revenue, nil
 }
 
 func (s *orderRepoStub) UpdatePaymentStatus(_ context.Context, id string, status domain.Status, transactionID string) (domain.Order, error) {
@@ -162,5 +169,25 @@ func TestCancelRejectsPaidOrder(t *testing.T) {
 	_, err := service.Cancel(context.Background(), "order-1")
 	if err != ErrConflict {
 		t.Fatalf("Cancel() error = %v, want %v", err, ErrConflict)
+	}
+}
+
+func TestGetRevenueByCustomerID(t *testing.T) {
+	repo := newOrderRepoStub()
+	repo.revenue = domain.Revenue{TotalAmount: 75000, OrdersCount: 5}
+	service := NewService(repo, &paymentAuthorizerStub{})
+
+	revenue, err := service.GetRevenueByCustomerID(context.Background(), "c1")
+	if err != nil {
+		t.Fatalf("GetRevenueByCustomerID() error = %v", err)
+	}
+	if revenue.CustomerID != "c1" {
+		t.Fatalf("revenue.CustomerID = %s, want c1", revenue.CustomerID)
+	}
+	if revenue.TotalAmount != 75000 {
+		t.Fatalf("revenue.TotalAmount = %d, want 75000", revenue.TotalAmount)
+	}
+	if revenue.OrdersCount != 5 {
+		t.Fatalf("revenue.OrdersCount = %d, want 5", revenue.OrdersCount)
 	}
 }

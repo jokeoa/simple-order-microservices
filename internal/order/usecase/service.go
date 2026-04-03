@@ -24,6 +24,7 @@ type Repository interface {
 	Create(ctx context.Context, order domain.Order) (domain.Order, error)
 	GetByID(ctx context.Context, id string) (domain.Order, error)
 	GetByIdempotencyKey(ctx context.Context, key string) (domain.Order, error)
+	GetRevenueByCustomerID(ctx context.Context, customerID string) (domain.Revenue, error)
 	UpdatePaymentStatus(ctx context.Context, id string, status domain.Status, transactionID string) (domain.Order, error)
 	UpdateStatus(ctx context.Context, id string, status domain.Status) (domain.Order, error)
 }
@@ -114,6 +115,15 @@ func (s *Service) Create(ctx context.Context, input CreateOrderInput) (domain.Or
 
 func (s *Service) GetByID(ctx context.Context, id string) (domain.Order, error) {
 	return s.repository.GetByID(ctx, id)
+}
+
+func (s *Service) GetRevenueByCustomerID(ctx context.Context, customerID string) (domain.Revenue, error) {
+	revenue, err := s.repository.GetRevenueByCustomerID(ctx, customerID)
+	if err != nil {
+		return domain.Revenue{}, fmt.Errorf("get customer revenue: %w", err)
+	}
+
+	return revenue, nil
 }
 
 func (s *Service) Cancel(ctx context.Context, id string) (domain.Order, error) {

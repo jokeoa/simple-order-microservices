@@ -111,6 +111,26 @@ func (r *Repository) GetByIdempotencyKey(ctx context.Context, key string) (domai
 	return order, nil
 }
 
+func (r *Repository) GetRevenueByCustomerID(ctx context.Context, customerID string) (domain.Revenue, error) {
+	const query = `
+		SELECT $1, COALESCE(SUM(amount), 0), COUNT(*)
+		FROM orders
+		WHERE customer_id = $1
+		  AND status = 'Paid'
+	`
+
+	var revenue domain.Revenue
+	if err := r.pool.QueryRow(ctx, query, customerID).Scan(
+		&revenue.CustomerID,
+		&revenue.TotalAmount,
+		&revenue.OrdersCount,
+	); err != nil {
+		return domain.Revenue{}, fmt.Errorf("query customer revenue: %w", err)
+	}
+
+	return revenue, nil
+}
+
 func (r *Repository) UpdatePaymentStatus(ctx context.Context, id string, status domain.Status, transactionID string) (domain.Order, error) {
 	const query = `
 		UPDATE orders

@@ -6,6 +6,7 @@
 - Order creation persists `Pending` before the payment call. If payment times out or the Payment Service is unavailable, the API returns `503` and keeps the order `Pending`. That makes retries explicit instead of hiding an uncertain distributed outcome.
 - `POST /orders` requires `Idempotency-Key`. The key is bound to a request fingerprint. Same key plus same payload reuses the existing order; same key plus different payload returns `409`.
 - Retries against a `Pending` order re-run payment authorization for the same `order_id`. Payment-side uniqueness on `order_id` prevents duplicate transactions if the first request partially succeeded.
+- `GET /orders/revenue?customer_id=...` reports realized revenue only. It sums and counts `Paid` orders for that customer; `Pending`, `Failed`, and `Cancelled` orders are excluded.
 
 ## Architecture
 ```mermaid
@@ -71,6 +72,11 @@ Get or cancel an order:
 ```bash
 curl -i http://localhost:8080/orders/<order-id>
 curl -i -X PATCH http://localhost:8080/orders/<order-id>/cancel
+```
+
+Get paid-order revenue for a customer:
+```bash
+curl -i "http://localhost:8080/orders/revenue?customer_id=c1"
 ```
 
 Get a payment decision directly:
