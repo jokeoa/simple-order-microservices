@@ -11,6 +11,11 @@ import (
 	"time"
 
 	orderapp "github.com/jokeoa/simple-order-microservices/internal/order/app"
+	orderhttpclient "github.com/jokeoa/simple-order-microservices/internal/order/paymentclient/http"
+	orderrepo "github.com/jokeoa/simple-order-microservices/internal/order/repository/postgres"
+	ordertransport "github.com/jokeoa/simple-order-microservices/internal/order/transport/http"
+	orderusecase "github.com/jokeoa/simple-order-microservices/internal/order/usecase"
+	"github.com/jokeoa/simple-order-microservices/internal/platform/migrate"
 	"github.com/jokeoa/simple-order-microservices/internal/platform/postgres"
 	"github.com/jokeoa/simple-order-microservices/internal/platform/validate"
 )
@@ -30,13 +35,22 @@ func main() {
 	}
 	defer pool.Close()
 
-	_ = validate.New()
+	if err := migrate.Run(ctx, pool, orderrepo.Migrations()); err != nil {
+		log.Fatalf("run migrations: %v", err)
+	}
+
+	validator := validate.New()
+	repository := orderrepo.NewRepository(pool)
+	paymentClient := orderhttpclient.New(cfg.PaymentBaseURL, &http.Client{Timeout: cfg.PaymentTimeout})
+	service := orderusecase.NewService(repository, paymentClient)
+	handler := ordertransport.NewHandler(service, validator)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
+	handler.Register(mux)
 
 	server := &http.Server{
 		Addr:              cfg.HTTPAddr,
