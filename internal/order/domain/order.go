@@ -17,6 +17,8 @@ type Order struct {
 	ItemName             string
 	Amount               int64
 	Status               Status
+	IdempotencyKey       string
+	RequestFingerprint   string
 	PaymentTransactionID string
 	CreatedAt            time.Time
 	UpdatedAt            time.Time

@@ -12,7 +12,7 @@ import (
 )
 
 type orderService interface {
-	Create(ctx context.Context, input usecase.CreateOrderInput) (domain.Order, error)
+	Create(ctx context.Context, input usecase.CreateOrderInput) (domain.Order, bool, error)
 	GetByID(ctx context.Context, id string) (domain.Order, error)
 	Cancel(ctx context.Context, id string) (domain.Order, error)
 }
@@ -48,6 +48,12 @@ func (h *Handler) Register(mux *http.ServeMux) {
 }
 
 func (h *Handler) createOrder(w http.ResponseWriter, r *http.Request) {
+	idempotencyKey := r.Header.Get("Idempotency-Key")
+	if idempotencyKey == "" {
+		httpx.WriteError(w, http.StatusBadRequest, "Idempotency-Key header is required")
+		return
+	}
+
 	var request createOrderRequest
 	if err := httpx.DecodeJSON(r, &request); err != nil {
 		httpx.WriteError(w, http.StatusBadRequest, "invalid request body")
@@ -59,22 +65,30 @@ func (h *Handler) createOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	order, err := h.service.Create(r.Context(), usecase.CreateOrderInput{
-		CustomerID: request.CustomerID,
-		ItemName:   request.ItemName,
-		Amount:     request.Amount,
+	order, created, err := h.service.Create(r.Context(), usecase.CreateOrderInput{
+		IdempotencyKey: idempotencyKey,
+		CustomerID:     request.CustomerID,
+		ItemName:       request.ItemName,
+		Amount:         request.Amount,
 	})
 	if err != nil {
-		if errors.Is(err, usecase.ErrPaymentUnavailable) {
+		switch {
+		case errors.Is(err, usecase.ErrPaymentUnavailable):
 			httpx.WriteJSON(w, http.StatusServiceUnavailable, mapOrder(order))
-			return
+		case errors.Is(err, usecase.ErrIdempotencyConflict):
+			httpx.WriteError(w, http.StatusConflict, "idempotency key payload mismatch")
+		default:
+			httpx.WriteError(w, http.StatusInternalServerError, "failed to create order")
 		}
-
-		httpx.WriteError(w, http.StatusInternalServerError, "failed to create order")
 		return
 	}
 
-	httpx.WriteJSON(w, http.StatusCreated, mapOrder(order))
+	status := http.StatusCreated
+	if !created {
+		status = http.StatusOK
+	}
+
+	httpx.WriteJSON(w, status, mapOrder(order))
 }
 
 func (h *Handler) getOrder(w http.ResponseWriter, r *http.Request) {
