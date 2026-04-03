@@ -1,0 +1,20 @@
+flowchart LR
+    subgraph Client
+        C["HTTP client"]
+    end
+
+    subgraph OrderService["Order Service"]
+        OH["ServeMux handlers"] --> OU["Use cases"]
+        OU --> OR["Order repository"]
+        OU --> PGW["Payment HTTP client"]
+        OR --> ODB[("Order Postgres")]
+    end
+
+    subgraph PaymentService["Payment Service"]
+        PH["ServeMux handlers"] --> PU["Use cases"]
+        PU --> PR["Payment repository"]
+        PR --> PDB[("Payment Postgres")]
+    end
+
+    C --> OH
+    PGW --> PH
