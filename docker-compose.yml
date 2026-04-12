@@ -71,6 +71,22 @@ services:
       timeout: 5s
       retries: 10
 
+  order-web:
+    build:
+      context: ./order
+      dockerfile: Dockerfile
+    depends_on:
+      order-service:
+        condition: service_healthy
+    ports:
+      - "3000:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/ >/dev/null || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
 volumes:
   order-db-data:
   payment-db-data:
+

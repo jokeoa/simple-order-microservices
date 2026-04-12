@@ -42,6 +42,7 @@ docker compose up --build
 Endpoints after startup:
 - Order Service: `http://localhost:8080`
 - Payment Service: `http://localhost:8081`
+- Order Frontend: `http://localhost:3000`
 
 ## API examples
 Create an order:

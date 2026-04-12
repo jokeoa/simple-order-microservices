@@ -1,0 +1,72 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Manrope:wght@400;500;600&display=swap');
+@import "tailwindcss";
+
+@theme inline {
+  --font-sans: 'Manrope', 'Avenir Next', 'Segoe UI', sans-serif;
+  --font-mono: 'IBM Plex Mono', 'SFMono-Regular', monospace;
+}
+
+:root {
+  color-scheme: dark;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background:
+    radial-gradient(circle at top, rgba(245, 213, 164, 0.12), transparent 32%),
+    radial-gradient(circle at bottom right, rgba(175, 174, 172, 0.08), transparent 24%),
+    #11100d;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  font-family: 'Manrope', 'Avenir Next', 'Segoe UI', sans-serif;
+  background:
+    linear-gradient(180deg, rgba(14, 12, 9, 0.98), rgba(16, 14, 11, 0.94)),
+    #11100d;
+  color: #afaeac;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  background-size: 120px 120px;
+  mask-image: radial-gradient(circle at center, black, transparent 78%);
+  opacity: 0.28;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+code {
+  font-family: 'IBM Plex Mono', 'SFMono-Regular', monospace;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 0.15rem 0.55rem;
+  color: #faf9f6;
+}
+
+#root {
+  min-height: 100vh;
+}
