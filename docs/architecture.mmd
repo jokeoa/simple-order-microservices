@@ -6,15 +6,18 @@ flowchart LR
     subgraph OrderService["Order Service"]
         OH["ServeMux handlers"] --> OU["Use cases"]
         OU --> OR["Order repository"]
-        OU --> PGW["Payment HTTP client"]
+        OU --> PGC["Payment gRPC client"]
+        OGS["Order gRPC stream server"] --> OU
         OR --> ODB[("Order Postgres")]
     end
 
     subgraph PaymentService["Payment Service"]
         PH["ServeMux handlers"] --> PU["Use cases"]
+        PGS["Payment gRPC server"] --> PU
         PU --> PR["Payment repository"]
         PR --> PDB[("Payment Postgres")]
     end
 
     C --> OH
-    PGW --> PH
+    PGC --> PGS
+    ODB -->|"NOTIFY order_updates"| OGS
