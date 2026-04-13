@@ -1,0 +1,141 @@
+groups:
+  - name: ads2-slo-alerts
+    rules:
+      - alert: OrderCreationAvailabilityBurnRateWarning
+        expr: |
+          (
+            (
+              (
+                (
+                  (sum(rate(ads2_http_requests_total{service="order-service",method="POST",route="/orders",status_class="5xx"}[6h])) or vector(0))
+                  /
+                  clamp_min((sum(rate(ads2_http_requests_total{service="order-service",method="POST",route="/orders",status_class!="4xx"}[6h])) or vector(0)), 0.000001)
+                ) / 0.005
+              ) > 6
+            )
+            and
+            (
+              (
+                (
+                  (sum(rate(ads2_http_requests_total{service="order-service",method="POST",route="/orders",status_class="5xx"}[30m])) or vector(0))
+                  /
+                  clamp_min((sum(rate(ads2_http_requests_total{service="order-service",method="POST",route="/orders",status_class!="4xx"}[30m])) or vector(0)), 0.000001)
+                ) / 0.005
+              ) > 6
+            )
+          )
+          and
+          ((sum(rate(ads2_http_requests_total{service="order-service",method="POST",route="/orders",status_class!="4xx"}[6h])) or vector(0)) > 0)
+        for: 10m
+        labels:
+          severity: warning
+          slo: order-creation-availability
+          service: order-service
+        annotations:
+          summary: Order creation availability is burning error budget too quickly
+          description: /orders availability is consuming the 99.5% monthly error budget at >6x burn rate across 6h and 30m windows.
+
+      - alert: OrderCreationAvailabilityBurnRateCritical
+        expr: |
+          (
+            (
+              (
+                (
+                  (sum(rate(ads2_http_requests_total{service="order-service",method="POST",route="/orders",status_class="5xx"}[1h])) or vector(0))
+                  /
+                  clamp_min((sum(rate(ads2_http_requests_total{service="order-service",method="POST",route="/orders",status_class!="4xx"}[1h])) or vector(0)), 0.000001)
+                ) / 0.005
+              ) > 14.4
+            )
+            and
+            (
+              (
+                (
+                  (sum(rate(ads2_http_requests_total{service="order-service",method="POST",route="/orders",status_class="5xx"}[5m])) or vector(0))
+                  /
+                  clamp_min((sum(rate(ads2_http_requests_total{service="order-service",method="POST",route="/orders",status_class!="4xx"}[5m])) or vector(0)), 0.000001)
+                ) / 0.005
+              ) > 14.4
+            )
+          )
+          and
+          ((sum(rate(ads2_http_requests_total{service="order-service",method="POST",route="/orders",status_class!="4xx"}[1h])) or vector(0)) > 0)
+        for: 5m
+        labels:
+          severity: critical
+          slo: order-creation-availability
+          service: order-service
+
+      - alert: PaymentAuthorizationLatencyBurnRateWarning
+        expr: |
+          (
+            (
+              (
+                (
+                  1 -
+                  (
+                    (sum(rate(ads2_payment_client_request_duration_seconds_bucket{service="order-service",target_service="payment-service",method="POST",route="/payments",le="1.5"}[6h])) or vector(0))
+                    /
+                    clamp_min((sum(rate(ads2_payment_client_request_duration_seconds_count{service="order-service",target_service="payment-service",method="POST",route="/payments"}[6h])) or vector(0)), 0.000001)
+                  )
+                ) / 0.05
+              ) > 6
+            )
+            and
+            (
+              (
+                (
+                  1 -
+                  (
+                    (sum(rate(ads2_payment_client_request_duration_seconds_bucket{service="order-service",target_service="payment-service",method="POST",route="/payments",le="1.5"}[30m])) or vector(0))
+                    /
+                    clamp_min((sum(rate(ads2_payment_client_request_duration_seconds_count{service="order-service",target_service="payment-service",method="POST",route="/payments"}[30m])) or vector(0)), 0.000001)
+                  )
+                ) / 0.05
+              ) > 6
+            )
+          )
+          and
+          ((sum(rate(ads2_payment_client_request_duration_seconds_count{service="order-service",target_service="payment-service",method="POST",route="/payments"}[6h])) or vector(0)) > 0)
+        for: 10m
+        labels:
+          severity: warning
+          slo: payment-authorization-latency
+          service: order-service
+
+      - alert: PaymentAuthorizationLatencyBurnRateCritical
+        expr: |
+          (
+            (
+              (
+                (
+                  1 -
+                  (
+                    (sum(rate(ads2_payment_client_request_duration_seconds_bucket{service="order-service",target_service="payment-service",method="POST",route="/payments",le="1.5"}[1h])) or vector(0))
+                    /
+                    clamp_min((sum(rate(ads2_payment_client_request_duration_seconds_count{service="order-service",target_service="payment-service",method="POST",route="/payments"}[1h])) or vector(0)), 0.000001)
+                  )
+                ) / 0.05
+              ) > 14.4
+            )
+            and
+            (
+              (
+                (
+                  1 -
+                  (
+                    (sum(rate(ads2_payment_client_request_duration_seconds_bucket{service="order-service",target_service="payment-service",method="POST",route="/payments",le="1.5"}[5m])) or vector(0))
+                    /
+                    clamp_min((sum(rate(ads2_payment_client_request_duration_seconds_count{service="order-service",target_service="payment-service",method="POST",route="/payments"}[5m])) or vector(0)), 0.000001)
+                  )
+                ) / 0.05
+              ) > 14.4
+            )
+          )
+          and
+          ((sum(rate(ads2_payment_client_request_duration_seconds_count{service="order-service",target_service="payment-service",method="POST",route="/payments"}[1h])) or vector(0)) > 0)
+        for: 5m
+        labels:
+          severity: critical
+          slo: payment-authorization-latency
+          service: order-service

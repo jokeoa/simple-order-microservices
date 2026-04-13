@@ -14,6 +14,7 @@ import (
 	paymentrepo "github.com/jokeoa/simple-order-microservices/internal/payment/repository/postgres"
 	paymenthttp "github.com/jokeoa/simple-order-microservices/internal/payment/transport/http"
 	paymentusecase "github.com/jokeoa/simple-order-microservices/internal/payment/usecase"
+	"github.com/jokeoa/simple-order-microservices/internal/platform/metrics"
 	"github.com/jokeoa/simple-order-microservices/internal/platform/migrate"
 	"github.com/jokeoa/simple-order-microservices/internal/platform/postgres"
 	"github.com/jokeoa/simple-order-microservices/internal/platform/validate"
@@ -40,6 +41,15 @@ func main() {
 
 	validator := validate.New()
 	repository := paymentrepo.NewRepository(pool)
+	registry := metrics.NewRegistry()
+	httpMetrics := metrics.NewHTTPServerMetrics("payment-service")
+	registry.MustRegister(httpMetrics.Collectors()...)
+	registry.MustRegister(
+		metrics.NewGoRuntimeCollector("payment-service"),
+		metrics.NewPostgresPoolConnectionsCollector("payment-service", pool),
+		metrics.NewPostgresPoolUtilizationCollector("payment-service", pool),
+	)
+
 	service := paymentusecase.NewService(repository)
 	handler := paymenthttp.NewHandler(service, validator)
 
@@ -48,11 +58,12 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
+	mux.Handle("GET /metrics", registry.Handler())
 	handler.Register(mux)
 
 	server := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           mux,
+		Handler:           httpMetrics.Middleware(mux),
 		ReadHeaderTimeout: 2 * time.Second,
 		ReadTimeout:       cfg.ReadTimeout,
 		WriteTimeout:      cfg.WriteTimeout,

@@ -43,6 +43,37 @@ Endpoints after startup:
 - Order Service: `http://localhost:8080`
 - Payment Service: `http://localhost:8081`
 - Order Frontend: `http://localhost:3000`
+- Prometheus: `http://localhost:9090`
+- Grafana: `http://localhost:3001` (`admin` / `admin`)
+- Node Exporter metrics: `http://localhost:9100/metrics`
+
+## Observability
+The repository now includes a default monitoring stack in the `monitoring/` directory:
+- `monitoring/prometheus/prometheus.yml` for Prometheus scrape configuration.
+- `monitoring/prometheus/rules/slo-rules.yml` for 30-day rolling SLO recording rules.
+- `monitoring/grafana/provisioning/datasources/prometheus.yml` for the default Prometheus datasource.
+- `monitoring/grafana/provisioning/dashboards/default.yml` for dashboard auto-provisioning.
+- `monitoring/grafana/dashboards/node-exporter-overview.json` as a starter infrastructure dashboard.
+- `monitoring/grafana/dashboards/sre-golden-signals.json` for application golden signals and SLO compliance.
+
+Start everything with:
+```bash
+docker compose up --build
+```
+
+Prometheus currently scrapes:
+- `prometheus:9090`
+- `order-service:8080/metrics`
+- `payment-service:8081/metrics`
+- `node-exporter:9100`
+
+Application metrics now include:
+- Inbound HTTP traffic, latency, and error metrics for both services.
+- Internal order-service to payment-service authorization latency and error metrics.
+- Saturation signals from Go runtime goroutines and Postgres connection pool utilization.
+- Two SLO compliance recording rules:
+  - Order creation availability: `99.5%` over a 30-day rolling window.
+  - Payment authorization latency under `1500 ms`: `95%` over a 30-day rolling window.
 
 ## API examples
 Create an order:

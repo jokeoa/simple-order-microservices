@@ -15,6 +15,7 @@ import (
 	orderrepo "github.com/jokeoa/simple-order-microservices/internal/order/repository/postgres"
 	ordertransport "github.com/jokeoa/simple-order-microservices/internal/order/transport/http"
 	orderusecase "github.com/jokeoa/simple-order-microservices/internal/order/usecase"
+	"github.com/jokeoa/simple-order-microservices/internal/platform/metrics"
 	"github.com/jokeoa/simple-order-microservices/internal/platform/migrate"
 	"github.com/jokeoa/simple-order-microservices/internal/platform/postgres"
 	"github.com/jokeoa/simple-order-microservices/internal/platform/validate"
@@ -41,7 +42,18 @@ func main() {
 
 	validator := validate.New()
 	repository := orderrepo.NewRepository(pool)
-	paymentClient := orderhttpclient.New(cfg.PaymentBaseURL, &http.Client{Timeout: cfg.PaymentTimeout})
+	registry := metrics.NewRegistry()
+	httpMetrics := metrics.NewHTTPServerMetrics("order-service")
+	paymentClientMetrics := metrics.NewPaymentClientMetrics("order-service", "payment-service")
+	registry.MustRegister(httpMetrics.Collectors()...)
+	registry.MustRegister(paymentClientMetrics.Collectors()...)
+	registry.MustRegister(
+		metrics.NewGoRuntimeCollector("order-service"),
+		metrics.NewPostgresPoolConnectionsCollector("order-service", pool),
+		metrics.NewPostgresPoolUtilizationCollector("order-service", pool),
+	)
+
+	paymentClient := orderhttpclient.New(cfg.PaymentBaseURL, &http.Client{Timeout: cfg.PaymentTimeout}, paymentClientMetrics)
 	service := orderusecase.NewService(repository, paymentClient)
 	handler := ordertransport.NewHandler(service, validator)
 
@@ -50,11 +62,12 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
+	mux.Handle("GET /metrics", registry.Handler())
 	handler.Register(mux)
 
 	server := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           mux,
+		Handler:           httpMetrics.Middleware(mux),
 		ReadHeaderTimeout: 2 * time.Second,
 		ReadTimeout:       cfg.ReadTimeout,
 		WriteTimeout:      cfg.WriteTimeout,

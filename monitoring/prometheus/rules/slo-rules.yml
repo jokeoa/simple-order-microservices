@@ -1,0 +1,42 @@
+groups:
+  - name: ads2-slos
+    rules:
+      - record: slo:order_creation_availability:ratio30d
+        expr: |
+          (
+            (
+              (
+                (sum(increase(ads2_http_requests_total{service="order-service",method="POST",route="/orders",status_class!="4xx"}[30d])) or vector(0))
+                -
+                (sum(increase(ads2_http_requests_total{service="order-service",method="POST",route="/orders",status_class="5xx"}[30d])) or vector(0))
+              )
+              /
+              clamp_min((sum(increase(ads2_http_requests_total{service="order-service",method="POST",route="/orders",status_class!="4xx"}[30d])) or vector(0)), 1)
+            )
+            and
+            (
+              (sum(increase(ads2_http_requests_total{service="order-service",method="POST",route="/orders",status_class!="4xx"}[30d])) or vector(0)) > 0
+            )
+          ) or on() vector(1)
+
+      - record: slo:payment_authorization_latency:ratio30d
+        expr: |
+          (
+            (
+              (sum(increase(ads2_payment_client_request_duration_seconds_bucket{service="order-service",target_service="payment-service",method="POST",route="/payments",le="1.5"}[30d])) or vector(0))
+              /
+              clamp_min((sum(increase(ads2_payment_client_request_duration_seconds_count{service="order-service",target_service="payment-service",method="POST",route="/payments"}[30d])) or vector(0)), 1)
+            )
+            and
+            (
+              (sum(increase(ads2_payment_client_request_duration_seconds_count{service="order-service",target_service="payment-service",method="POST",route="/payments"}[30d])) or vector(0)) > 0
+            )
+          ) or on() vector(1)
+
+      - record: slo:order_creation_availability:error_budget_remaining30d
+        expr: |
+          clamp_max((0.005 - (1 - slo:order_creation_availability:ratio30d)) / 0.005, 1)
+
+      - record: slo:payment_authorization_latency:error_budget_remaining30d
+        expr: |
+          clamp_max((0.05 - (1 - slo:payment_authorization_latency:ratio30d)) / 0.05, 1)
