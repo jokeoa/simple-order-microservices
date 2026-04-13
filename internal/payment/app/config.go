@@ -8,6 +8,7 @@ import (
 
 type Config struct {
 	HTTPAddr         string
+	GRPCAddr         string
 	PostgresDSN      string
 	PostgresMaxConns int32
 	ReadTimeout      time.Duration
@@ -35,8 +36,14 @@ func LoadConfig() (Config, error) {
 		return Config{}, err
 	}
 
+	grpcAddr, err := env.MustString("PAYMENT_GRPC_ADDR")
+	if err != nil {
+		return Config{}, err
+	}
+
 	return Config{
 		HTTPAddr:         env.String("PAYMENT_HTTP_ADDR", ":8081"),
+		GRPCAddr:         grpcAddr,
 		PostgresDSN:      postgresDSN,
 		PostgresMaxConns: int32(maxConns),
 		ReadTimeout:      readTimeout,

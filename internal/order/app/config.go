@@ -8,13 +8,15 @@ import (
 )
 
 type Config struct {
-	HTTPAddr         string
-	PostgresDSN      string
-	PostgresMaxConns int32
-	ReadTimeout      time.Duration
-	WriteTimeout     time.Duration
-	PaymentBaseURL   string
-	PaymentTimeout   time.Duration
+	HTTPAddr          string
+	GRPCAddr          string
+	PostgresDSN       string
+	PostgresMaxConns  int32
+	ReadTimeout       time.Duration
+	WriteTimeout      time.Duration
+	StreamTimeout     time.Duration
+	PaymentGRPCTarget string
+	PaymentTimeout    time.Duration
 }
 
 func LoadConfig() (Config, error) {
@@ -38,12 +40,22 @@ func LoadConfig() (Config, error) {
 		return Config{}, err
 	}
 
-	paymentTimeout, err := env.Duration("PAYMENT_CLIENT_TIMEOUT", 2*time.Second)
+	streamTimeout, err := env.Duration("ORDER_GRPC_STREAM_TIMEOUT", 5*time.Minute)
 	if err != nil {
 		return Config{}, err
 	}
 
-	paymentBaseURL, err := env.MustString("PAYMENT_BASE_URL")
+	grpcAddr, err := env.MustString("ORDER_GRPC_ADDR")
+	if err != nil {
+		return Config{}, err
+	}
+
+	paymentTimeout, err := env.Duration("PAYMENT_GRPC_TIMEOUT", 2*time.Second)
+	if err != nil {
+		return Config{}, err
+	}
+
+	paymentTarget, err := env.MustString("PAYMENT_GRPC_TARGET")
 	if err != nil {
 		return Config{}, err
 	}
@@ -53,12 +65,14 @@ func LoadConfig() (Config, error) {
 	}
 
 	return Config{
-		HTTPAddr:         env.String("ORDER_HTTP_ADDR", ":8080"),
-		PostgresDSN:      postgresDSN,
-		PostgresMaxConns: int32(maxConns),
-		ReadTimeout:      readTimeout,
-		WriteTimeout:     writeTimeout,
-		PaymentBaseURL:   paymentBaseURL,
-		PaymentTimeout:   paymentTimeout,
+		HTTPAddr:          env.String("ORDER_HTTP_ADDR", ":8080"),
+		GRPCAddr:          grpcAddr,
+		PostgresDSN:       postgresDSN,
+		PostgresMaxConns:  int32(maxConns),
+		ReadTimeout:       readTimeout,
+		WriteTimeout:      writeTimeout,
+		StreamTimeout:     streamTimeout,
+		PaymentGRPCTarget: paymentTarget,
+		PaymentTimeout:    paymentTimeout,
 	}, nil
 }
