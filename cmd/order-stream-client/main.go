@@ -12,6 +12,7 @@ import (
 
 	orderv1 "github.com/jokeoa/simple-order-microservices/internal/gen/order/v1"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
@@ -28,19 +29,27 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	dialCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-
-	connection, err := grpc.DialContext(
-		dialCtx,
+	connection, err := grpc.NewClient(
 		target,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithBlock(),
 	)
 	if err != nil {
 		log.Fatalf("connect order grpc: %v", err)
 	}
 	defer connection.Close()
+
+	readyCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	connection.Connect()
+	for state := connection.GetState(); state != connectivity.Ready; state = connection.GetState() {
+		if state == connectivity.Shutdown {
+			log.Fatal("connect order grpc: connection shut down before becoming ready")
+		}
+		if !connection.WaitForStateChange(readyCtx, state) {
+			log.Fatalf("connect order grpc: %v", readyCtx.Err())
+		}
+	}
 
 	stream, err := orderv1.NewOrderServiceClient(connection).SubscribeToOrderUpdates(ctx, &orderv1.OrderRequest{
 		OrderId: os.Args[1],
