@@ -15,6 +15,19 @@ export interface Revenue {
   orders_count: number
 }
 
+export type PaymentStatus = 'Authorized' | 'Declined'
+
+export interface Payment {
+  order_id: string
+  amount: number
+  status: PaymentStatus
+  transaction_id?: string
+}
+
+export interface PaymentList {
+  payments: Payment[]
+}
+
 export interface CreateOrderPayload {
   customer_id: string
   item_name: string

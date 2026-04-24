@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -71,4 +72,55 @@ func (r *Repository) Create(ctx context.Context, payment domain.Payment) (domain
 	}
 
 	return created, nil
+}
+
+func (r *Repository) FindByAmountRange(ctx context.Context, min, max int64) ([]domain.Payment, error) {
+	query := strings.Builder{}
+	query.WriteString(`
+		SELECT order_id, amount, status, COALESCE(transaction_id, ''), created_at, updated_at
+		FROM payments
+	`)
+
+	args := make([]any, 0, 2)
+	conditions := make([]string, 0, 2)
+	if min > 0 {
+		args = append(args, min)
+		conditions = append(conditions, fmt.Sprintf("amount >= $%d", len(args)))
+	}
+	if max > 0 {
+		args = append(args, max)
+		conditions = append(conditions, fmt.Sprintf("amount <= $%d", len(args)))
+	}
+	if len(conditions) > 0 {
+		query.WriteString(" WHERE ")
+		query.WriteString(strings.Join(conditions, " AND "))
+	}
+	query.WriteString(" ORDER BY created_at DESC, order_id ASC")
+
+	rows, err := r.pool.Query(ctx, query.String(), args...)
+	if err != nil {
+		return nil, fmt.Errorf("query payments by amount range: %w", err)
+	}
+	defer rows.Close()
+
+	payments := make([]domain.Payment, 0)
+	for rows.Next() {
+		var payment domain.Payment
+		if err := rows.Scan(
+			&payment.OrderID,
+			&payment.Amount,
+			&payment.Status,
+			&payment.TransactionID,
+			&payment.CreatedAt,
+			&payment.UpdatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan payment by amount range: %w", err)
+		}
+		payments = append(payments, payment)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate payments by amount range: %w", err)
+	}
+
+	return payments, nil
 }

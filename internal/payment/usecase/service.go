@@ -10,9 +10,11 @@ import (
 )
 
 var ErrNotFound = errors.New("payment not found")
+var ErrInvalidAmountRange = errors.New("invalid payment amount range")
 
 type Repository interface {
 	GetByOrderID(ctx context.Context, orderID string) (domain.Payment, error)
+	FindByAmountRange(ctx context.Context, min, max int64) ([]domain.Payment, error)
 	Create(ctx context.Context, payment domain.Payment) (domain.Payment, error)
 }
 
@@ -74,4 +76,20 @@ func (s *Service) GetByOrderID(ctx context.Context, orderID string) (domain.Paym
 	}
 
 	return payment, nil
+}
+
+func (s *Service) ListPayments(ctx context.Context, min, max int64) ([]domain.Payment, error) {
+	if min < 0 || max < 0 {
+		return nil, ErrInvalidAmountRange
+	}
+	if min > 0 && max > 0 && min > max {
+		return nil, ErrInvalidAmountRange
+	}
+
+	payments, err := s.repository.FindByAmountRange(ctx, min, max)
+	if err != nil {
+		return nil, fmt.Errorf("list payments by amount range: %w", err)
+	}
+
+	return payments, nil
 }

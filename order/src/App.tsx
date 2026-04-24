@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 
 import { useOrderStore } from './store/useOrderStore'
-import type { Order, OrderStatus } from './types'
+import type { Order, OrderStatus, Payment, PaymentStatus } from './types'
 
 const statusTone: Record<
   OrderStatus,
@@ -30,6 +30,24 @@ const statusTone: Record<
       'border-[rgba(178,177,173,0.24)] bg-[rgba(178,177,173,0.10)] text-[#d0cdca]',
     dot: 'bg-[#b2b1ad]',
     label: 'Cancelled before payment',
+  },
+}
+
+const paymentStatusTone: Record<
+  PaymentStatus,
+  { pill: string; dot: string; label: string }
+> = {
+  Authorized: {
+    pill:
+      'border-[rgba(189,228,197,0.28)] bg-[rgba(189,228,197,0.10)] text-[#d8e6d7]',
+    dot: 'bg-[#bde4c5]',
+    label: 'Authorized',
+  },
+  Declined: {
+    pill:
+      'border-[rgba(232,164,164,0.28)] bg-[rgba(232,164,164,0.10)] text-[#efc2c2]',
+    dot: 'bg-[#ef9c9c]',
+    label: 'Declined',
   },
 }
 
@@ -127,6 +145,19 @@ function StatusBadge({ status }: { status: OrderStatus }) {
   )
 }
 
+function PaymentStatusBadge({ status }: { status: PaymentStatus }) {
+  const tone = paymentStatusTone[status]
+
+  return (
+    <span
+      className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs uppercase tracking-[0.24em] ${tone.pill}`}
+    >
+      <span className={`h-2 w-2 rounded-full ${tone.dot}`}></span>
+      {tone.label}
+    </span>
+  )
+}
+
 function OrderCard({ order }: { order: Order }) {
   const tone = statusTone[order.status]
 
@@ -182,6 +213,41 @@ function OrderCard({ order }: { order: Order }) {
   )
 }
 
+function PaymentCard({ payment }: { payment: Payment }) {
+  return (
+    <div className="rounded-[24px] border border-[rgba(226,226,226,0.16)] bg-[rgba(10,9,7,0.42)] p-5">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p className="text-[11px] uppercase tracking-[0.32em] text-[#868584]">
+            Payment record
+          </p>
+          <h3 className="mt-3 break-all font-mono text-lg tracking-[-0.03em] text-[#faf9f6] sm:text-xl">
+            {payment.order_id}
+          </h3>
+        </div>
+        <PaymentStatusBadge status={payment.status} />
+      </div>
+
+      <dl className="mt-6 grid gap-4 text-sm text-[#afaeac] sm:grid-cols-2">
+        <div>
+          <dt className="text-[11px] uppercase tracking-[0.24em] text-[#666469]">
+            Amount
+          </dt>
+          <dd className="mt-2 text-[#faf9f6]">{formatAmount(payment.amount)}</dd>
+        </div>
+        <div>
+          <dt className="text-[11px] uppercase tracking-[0.24em] text-[#666469]">
+            Transaction
+          </dt>
+          <dd className="mt-2 break-all text-[#faf9f6]">
+            {payment.transaction_id ?? 'Not issued'}
+          </dd>
+        </div>
+      </dl>
+    </div>
+  )
+}
+
 function App() {
   const {
     banner,
@@ -190,8 +256,12 @@ function App() {
     dismissBanner,
     loadOrder,
     loadRecentOrder,
+    loadPayments,
     loadRevenue,
     lookupOrderId,
+    paymentListResult,
+    paymentMaxAmount,
+    paymentMinAmount,
     recentOrders,
     resetIdempotencyKey,
     revenueCustomerId,
@@ -199,6 +269,8 @@ function App() {
     selectedOrder,
     setCreateField,
     setLookupOrderId,
+    setPaymentMaxAmount,
+    setPaymentMinAmount,
     setRevenueCustomerId,
     submitOrder,
     cancelSelectedOrder,
@@ -518,6 +590,80 @@ function App() {
                 {revenueResult.data?.orders_count ?? '0'}
               </p>
             </div>
+          </div>
+        </div>
+      </SectionShell>
+
+      <SectionShell
+        eyebrow="Payments"
+        title="Browse payment outcomes by amount range"
+        description="This view reads directly from the payment service through the new frontend proxy, so you can inspect authorized and declined charges without going through order lookup."
+      >
+        <div className="grid gap-6 lg:grid-cols-[0.72fr_1.28fr]">
+          <form
+            className="space-y-4"
+            onSubmit={(event) => {
+              event.preventDefault()
+              void loadPayments()
+            }}
+          >
+            <Field
+              label="Min amount"
+              hint="cents, optional"
+              value={paymentMinAmount}
+              onChange={setPaymentMinAmount}
+              placeholder="0"
+              type="number"
+            />
+            <Field
+              label="Max amount"
+              hint="cents, optional"
+              value={paymentMaxAmount}
+              onChange={setPaymentMaxAmount}
+              placeholder="0"
+              type="number"
+            />
+            <button
+              className="inline-flex rounded-full bg-[#353534] px-5 py-3 text-sm text-[#faf9f6] transition hover:bg-[#454441] disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={paymentListResult.loading}
+              type="submit"
+            >
+              {paymentListResult.loading ? 'Loading...' : 'Fetch payments'}
+            </button>
+            <p className="text-sm leading-6 text-[#868584]">
+              Leave either field empty to keep that side of the range open.
+            </p>
+            {paymentListResult.error ? (
+              <p className="text-sm text-[#efc2c2]">{paymentListResult.error}</p>
+            ) : null}
+          </form>
+
+          <div className="space-y-4">
+            <div className="rounded-[24px] border border-[rgba(226,226,226,0.14)] bg-[rgba(255,255,255,0.03)] p-5">
+              <p className="text-[11px] uppercase tracking-[0.28em] text-[#666469]">
+                Matching payments
+              </p>
+              <p className="mt-3 text-2xl tracking-[-0.04em] text-[#faf9f6]">
+                {paymentListResult.data?.length ?? 0}
+              </p>
+            </div>
+
+            {paymentListResult.data?.length ? (
+              <div className="grid gap-4">
+                {paymentListResult.data.map((payment) => (
+                  <PaymentCard
+                    key={`${payment.order_id}:${payment.transaction_id ?? 'declined'}`}
+                    payment={payment}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-[24px] border border-[rgba(226,226,226,0.14)] bg-[rgba(255,255,255,0.03)] p-5 text-sm leading-7 text-[#afaeac]">
+                {paymentListResult.loading
+                  ? 'Loading payment records from the payment service.'
+                  : 'Run a payment query to inspect authorized and declined charges.'}
+              </div>
+            )}
           </div>
         </div>
       </SectionShell>

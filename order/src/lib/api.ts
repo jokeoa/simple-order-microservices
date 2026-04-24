@@ -1,6 +1,9 @@
-import type { CreateOrderPayload, Order, Revenue } from '../types'
+import type { CreateOrderPayload, Order, PaymentList, Revenue } from '../types'
 
 const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? '/api').replace(/\/$/, '')
+const paymentApiBaseUrl = (
+  import.meta.env.VITE_PAYMENT_API_BASE_URL ?? '/payment-api'
+).replace(/\/$/, '')
 
 type JsonRecord = Record<string, unknown>
 
@@ -41,8 +44,8 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init?: RequestInit) {
-  const response = await fetch(`${apiBaseUrl}${path}`, {
+async function requestWithBase<T>(baseUrl: string, path: string, init?: RequestInit) {
+  const response = await fetch(`${baseUrl}${path}`, {
     ...init,
     headers: {
       Accept: 'application/json',
@@ -64,6 +67,14 @@ async function request<T>(path: string, init?: RequestInit) {
     data: payload as T,
     status: response.status,
   }
+}
+
+async function request<T>(path: string, init?: RequestInit) {
+  return requestWithBase<T>(apiBaseUrl, path, init)
+}
+
+async function paymentRequest<T>(path: string, init?: RequestInit) {
+  return requestWithBase<T>(paymentApiBaseUrl, path, init)
 }
 
 export function createOrder(
@@ -94,4 +105,18 @@ export function getRevenue(customerId: string) {
   return request<Revenue>(
     `/orders/revenue?customer_id=${encodeURIComponent(customerId)}`,
   )
+}
+
+export function listPayments(minAmount?: number, maxAmount?: number) {
+  const params = new URLSearchParams()
+
+  if (typeof minAmount === 'number') {
+    params.set('min_amount', String(minAmount))
+  }
+  if (typeof maxAmount === 'number') {
+    params.set('max_amount', String(maxAmount))
+  }
+
+  const suffix = params.size > 0 ? `?${params.toString()}` : ''
+  return paymentRequest<PaymentList>(`/payments${suffix}`)
 }

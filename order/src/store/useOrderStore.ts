@@ -1,8 +1,21 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 
-import { ApiError, cancelOrder, createOrder, getOrder, getRevenue } from '../lib/api'
-import type { Banner, CreateOrderForm, Order, Revenue } from '../types'
+import {
+  ApiError,
+  cancelOrder,
+  createOrder,
+  getOrder,
+  getRevenue,
+  listPayments,
+} from '../lib/api'
+import type {
+  Banner,
+  CreateOrderForm,
+  Order,
+  Payment,
+  Revenue,
+} from '../types'
 
 const MAX_RECENT_ORDERS = 6
 
@@ -55,21 +68,41 @@ interface OrderStore {
   createForm: CreateOrderForm
   lookupOrderId: string
   revenueCustomerId: string
+  paymentMinAmount: string
+  paymentMaxAmount: string
   createResult: AsyncSlice<Order>
   selectedOrder: AsyncSlice<Order>
   revenueResult: AsyncSlice<Revenue>
+  paymentListResult: AsyncSlice<Payment[]>
   recentOrders: Order[]
   banner: Banner | null
   setCreateField: (field: keyof CreateOrderForm, value: string) => void
   resetIdempotencyKey: () => void
   setLookupOrderId: (value: string) => void
   setRevenueCustomerId: (value: string) => void
+  setPaymentMinAmount: (value: string) => void
+  setPaymentMaxAmount: (value: string) => void
   dismissBanner: () => void
   submitOrder: () => Promise<void>
   loadOrder: (orderId?: string) => Promise<void>
   loadRevenue: (customerId?: string) => Promise<void>
+  loadPayments: () => Promise<void>
   cancelSelectedOrder: () => Promise<void>
   loadRecentOrder: (order: Order) => void
+}
+
+function parseOptionalInteger(value: string) {
+  const trimmed = value.trim()
+  if (!trimmed) {
+    return null
+  }
+
+  const parsed = Number.parseInt(trimmed, 10)
+  if (Number.isNaN(parsed)) {
+    return null
+  }
+
+  return parsed
 }
 
 export const useOrderStore = create<OrderStore>()(
@@ -83,9 +116,12 @@ export const useOrderStore = create<OrderStore>()(
       },
       lookupOrderId: '',
       revenueCustomerId: '',
+      paymentMinAmount: '',
+      paymentMaxAmount: '',
       createResult: { data: null, loading: false, error: null },
       selectedOrder: { data: null, loading: false, error: null },
       revenueResult: { data: null, loading: false, error: null },
+      paymentListResult: { data: null, loading: false, error: null },
       recentOrders: [],
       banner: null,
       setCreateField: (field, value) => {
@@ -109,6 +145,12 @@ export const useOrderStore = create<OrderStore>()(
       },
       setRevenueCustomerId: (value) => {
         set({ revenueCustomerId: value })
+      },
+      setPaymentMinAmount: (value) => {
+        set({ paymentMinAmount: value })
+      },
+      setPaymentMaxAmount: (value) => {
+        set({ paymentMaxAmount: value })
       },
       dismissBanner: () => {
         set({ banner: null })
@@ -250,6 +292,71 @@ export const useOrderStore = create<OrderStore>()(
             banner: {
               tone: 'danger',
               message: toMessage(error, 'Failed to load revenue.'),
+            },
+          })
+        }
+      },
+      loadPayments: async () => {
+        const minAmount = parseOptionalInteger(get().paymentMinAmount)
+        const maxAmount = parseOptionalInteger(get().paymentMaxAmount)
+
+        if (get().paymentMinAmount.trim() && minAmount === null) {
+          set({
+            paymentListResult: {
+              data: null,
+              loading: false,
+              error: 'Min amount must be an integer.',
+            },
+          })
+          return
+        }
+
+        if (get().paymentMaxAmount.trim() && maxAmount === null) {
+          set({
+            paymentListResult: {
+              data: null,
+              loading: false,
+              error: 'Max amount must be an integer.',
+            },
+          })
+          return
+        }
+
+        set({
+          paymentListResult: {
+            data: get().paymentListResult.data,
+            loading: true,
+            error: null,
+          },
+          banner: null,
+        })
+
+        try {
+          const result = await listPayments(minAmount ?? undefined, maxAmount ?? undefined)
+          set({
+            paymentListResult: {
+              data: result.data.payments,
+              loading: false,
+              error: null,
+            },
+            banner: {
+              tone: 'success',
+              message:
+                result.data.payments.length > 0
+                  ? `Loaded ${result.data.payments.length} payment records.`
+                  : 'No payments matched the current range.',
+            },
+          })
+        } catch (error) {
+          set({
+            paymentListResult: {
+              data: null,
+              loading: false,
+              error: toMessage(error, 'Failed to load payments.'),
+            },
+            banner: {
+              tone: 'danger',
+              message: toMessage(error, 'Failed to load payments.'),
             },
           })
         }

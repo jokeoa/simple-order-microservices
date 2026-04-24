@@ -11,6 +11,10 @@ import (
 type paymentRepoStub struct {
 	getResult  domain.Payment
 	getErr     error
+	findResult []domain.Payment
+	findErr    error
+	findMin    int64
+	findMax    int64
 	createFunc func(domain.Payment) (domain.Payment, error)
 }
 
@@ -23,6 +27,12 @@ func (s *paymentRepoStub) Create(_ context.Context, payment domain.Payment) (dom
 		return s.createFunc(payment)
 	}
 	return payment, nil
+}
+
+func (s *paymentRepoStub) FindByAmountRange(_ context.Context, min, max int64) ([]domain.Payment, error) {
+	s.findMin = min
+	s.findMax = max
+	return s.findResult, s.findErr
 }
 
 func TestAuthorizeDeclinesLargeAmount(t *testing.T) {
@@ -83,5 +93,71 @@ func TestAuthorizeReloadsOnConcurrentDuplicate(t *testing.T) {
 	}
 	if payment != existing {
 		t.Fatalf("Authorize() payment = %#v, want %#v", payment, existing)
+	}
+}
+
+func TestListPaymentsReturnsFilteredPayments(t *testing.T) {
+	repo := &paymentRepoStub{
+		findResult: []domain.Payment{
+			{OrderID: "order-2", Amount: 300},
+			{OrderID: "order-1", Amount: 200},
+		},
+	}
+	service := NewService(repo)
+
+	payments, err := service.ListPayments(context.Background(), 200, 300)
+	if err != nil {
+		t.Fatalf("ListPayments() error = %v", err)
+	}
+	if repo.findMin != 200 || repo.findMax != 300 {
+		t.Fatalf("ListPayments() forwarded range = [%d,%d], want [200,300]", repo.findMin, repo.findMax)
+	}
+	if len(payments) != 2 {
+		t.Fatalf("ListPayments() len = %d, want 2", len(payments))
+	}
+	if payments[0].OrderID != "order-2" || payments[1].OrderID != "order-1" {
+		t.Fatalf("ListPayments() unexpected payments = %#v", payments)
+	}
+}
+
+func TestListPaymentsReturnsAllForUnboundedRange(t *testing.T) {
+	repo := &paymentRepoStub{
+		findResult: []domain.Payment{{OrderID: "order-1", Amount: 100}},
+	}
+	service := NewService(repo)
+
+	payments, err := service.ListPayments(context.Background(), 0, 0)
+	if err != nil {
+		t.Fatalf("ListPayments() error = %v", err)
+	}
+	if repo.findMin != 0 || repo.findMax != 0 {
+		t.Fatalf("ListPayments() forwarded range = [%d,%d], want [0,0]", repo.findMin, repo.findMax)
+	}
+	if len(payments) != 1 {
+		t.Fatalf("ListPayments() len = %d, want 1", len(payments))
+	}
+}
+
+func TestListPaymentsRejectsInvalidRanges(t *testing.T) {
+	service := NewService(&paymentRepoStub{})
+
+	tests := []struct {
+		name string
+		min  int64
+		max  int64
+	}{
+		{name: "negative min", min: -1, max: 0},
+		{name: "negative max", min: 0, max: -1},
+		{name: "min greater than max", min: 300, max: 200},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := service.ListPayments(context.Background(), tt.min, tt.max)
+			if !errors.Is(err, ErrInvalidAmountRange) {
+				t.Fatalf("ListPayments() error = %v, want %v", err, ErrInvalidAmountRange)
+			}
+		})
 	}
 }

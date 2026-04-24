@@ -16,6 +16,7 @@ import (
 
 type paymentService interface {
 	Authorize(ctx context.Context, input usecase.AuthorizeInput) (domain.Payment, bool, error)
+	ListPayments(ctx context.Context, min, max int64) ([]domain.Payment, error)
 }
 
 type Server struct {
@@ -46,6 +47,30 @@ func (s *Server) ProcessPayment(ctx context.Context, request *paymentv1.PaymentR
 		return nil, mapError(err)
 	}
 
+	return mapPayment(payment), nil
+}
+
+func (s *Server) ListPayments(ctx context.Context, request *paymentv1.ListPaymentsRequest) (*paymentv1.ListPaymentsResponse, error) {
+	if request == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+
+	payments, err := s.service.ListPayments(ctx, request.GetMinAmount(), request.GetMaxAmount())
+	if err != nil {
+		return nil, mapError(err)
+	}
+
+	response := &paymentv1.ListPaymentsResponse{
+		Payments: make([]*paymentv1.PaymentResponse, 0, len(payments)),
+	}
+	for _, payment := range payments {
+		response.Payments = append(response.Payments, mapPayment(payment))
+	}
+
+	return response, nil
+}
+
+func mapPayment(payment domain.Payment) *paymentv1.PaymentResponse {
 	processedAt := payment.UpdatedAt
 	if processedAt.IsZero() {
 		processedAt = payment.CreatedAt
@@ -59,11 +84,13 @@ func (s *Server) ProcessPayment(ctx context.Context, request *paymentv1.PaymentR
 		Status:        string(payment.Status),
 		TransactionId: payment.TransactionID,
 		ProcessedAt:   timestamppb.New(processedAt),
-	}, nil
+	}
 }
 
 func mapError(err error) error {
 	switch {
+	case errors.Is(err, usecase.ErrInvalidAmountRange):
+		return status.Error(codes.InvalidArgument, "invalid amount range")
 	case errors.Is(err, usecase.ErrNotFound):
 		return status.Error(codes.NotFound, "payment not found")
 	default:

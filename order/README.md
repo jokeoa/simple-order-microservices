@@ -13,4 +13,4 @@ The Vite dev server runs on `http://localhost:5173` and proxies `/api/*` to the 
 
 ## Production container
 
-The root `docker-compose.yml` builds this app into an Nginx container and exposes it on `http://localhost:3000`. In the container, `/api/*` is proxied to `order-service`.
+The root `docker-compose.yml` builds this app into an Nginx container and exposes it on `http://localhost:3000`. In the container, `/api/*` is proxied to `order-service`, and `/payment-api/*` is proxied to `payment-service`.
