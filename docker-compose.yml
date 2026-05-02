@@ -31,6 +31,41 @@ services:
       timeout: 5s
       retries: 10
 
+  notification-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: notifications
+      POSTGRES_USER: notification
+      POSTGRES_PASSWORD: notification
+    ports:
+      - "5435:5432"
+    volumes:
+      - notification-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U notification -d notifications"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  nats:
+    image: nats:2.10-alpine
+    command:
+      - "-js"
+      - "-m"
+      - "8222"
+      - "--store_dir"
+      - "/data"
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    volumes:
+      - nats-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- 'http://127.0.0.1:8222/healthz?js-enabled-only=true' >/dev/null || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   payment-service:
     build:
       context: .
@@ -39,8 +74,11 @@ services:
       PAYMENT_HTTP_ADDR: ":8081"
       PAYMENT_GRPC_ADDR: ":9091"
       PAYMENT_POSTGRES_DSN: postgres://payment:payment@payment-db:5432/payments?sslmode=disable
+      NATS_URL: nats://nats:4222
     depends_on:
       payment-db:
+        condition: service_healthy
+      nats:
         condition: service_healthy
     ports:
       - "8081:8081"
@@ -50,6 +88,21 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+
+  notification-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.notification-service
+    environment:
+      NOTIFICATION_POSTGRES_DSN: postgres://notification:notification@notification-db:5432/notifications?sslmode=disable
+      NATS_URL: nats://nats:4222
+      NOTIFICATION_MAX_DELIVER: "3"
+      NOTIFICATION_RETRY_DELAY: 2s
+    depends_on:
+      notification-db:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
 
   order-service:
     build:
@@ -151,5 +204,7 @@ services:
 volumes:
   order-db-data:
   payment-db-data:
+  notification-db-data:
+  nats-data:
   prometheus-data:
   grafana-data:

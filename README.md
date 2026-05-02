@@ -9,6 +9,7 @@
 - `GET /orders/revenue?customer_id=...` reports realized revenue only. It sums and counts `Paid` orders for that customer; `Pending`, `Failed`, and `Cancelled` orders are excluded.
 - The `PaymentAuthorizer` seam stayed intact. Only the delivery/infrastructure path changed: Order now calls Payment over gRPC, and Order exposes a separate gRPC stream for internal subscribers.
 - `SubscribeToOrderUpdates` is driven by PostgreSQL `LISTEN/NOTIFY` on committed `orders` row changes. The stream is not a timer loop layered on top of fake state.
+- Payment Service publishes `payment.completed` events to NATS JetStream after a payment row is committed. Notification Service consumes them through the durable `notification-service` consumer with explicit ACKs, Postgres-backed message deduplication, and a `payment.completed.dlq` subject after retry exhaustion.
 
 ## Architecture
 ```mermaid
@@ -30,11 +31,25 @@ flowchart LR
         PGS["Payment gRPC server"] --> PU
         PU --> PR["Payment repository"]
         PR --> PDB[("Payment Postgres")]
+        PU --> NP["NATS publisher"]
+    end
+
+    subgraph NotificationService["Notification Service"]
+        NC["NATS durable consumer"] --> NU["Notification use case"]
+        NU --> NDB[("Notification Postgres")]
+    end
+
+    subgraph Broker["NATS JetStream"]
+        NS["PAYMENTS stream"]
+        DLQ["payment.completed.dlq"]
     end
 
     C --> OH
     PGC --> PGS
     ODB -->|"NOTIFY order_updates"| OGS
+    NP -->|"payment.completed"| NS
+    NS --> NC
+    NC -->|"failed after retries"| DLQ
 ```
 
 Mermaid source: [docs/architecture.mmd](/Users/jokeoa/ads2-assignment/docs/architecture.mmd)
@@ -47,6 +62,8 @@ docker compose up --build
 Endpoints after startup:
 - Order Service: `http://localhost:8080`
 - Payment Service: `http://localhost:8081`
+- NATS client port: `localhost:4222`
+- NATS monitoring: `http://localhost:8222`
 - Order gRPC: `localhost:9092`
 - Payment gRPC: `localhost:9091`
 - Order Frontend: `http://localhost:3000`
@@ -60,6 +77,10 @@ Required gRPC env vars:
 - `ORDER_GRPC_STREAM_TIMEOUT`
 - `PAYMENT_GRPC_TARGET`
 - `PAYMENT_GRPC_TIMEOUT`
+- `NATS_URL`
+- `NOTIFICATION_POSTGRES_DSN`
+- `NOTIFICATION_MAX_DELIVER`
+- `NOTIFICATION_RETRY_DELAY`
 
 The compose file publishes gRPC ports on loopback only (`127.0.0.1`) because they are intended for trusted internal traffic plus local verification, not general external exposure.
 
@@ -130,6 +151,11 @@ curl -i "http://localhost:8080/orders/revenue?customer_id=c1"
 Get a payment decision directly:
 ```bash
 curl -i http://localhost:8081/payments/<order-id>
+```
+
+Watch notification events:
+```bash
+docker compose logs -f notification-service
 ```
 
 Generate protobuf stubs:
