@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/jokeoa/simple-order-microservices/internal/payment/domain"
+	"github.com/jokeoa/simple-order-microservices/internal/platform/events"
 )
 
 type paymentRepoStub struct {
@@ -16,6 +17,18 @@ type paymentRepoStub struct {
 	findMin    int64
 	findMax    int64
 	createFunc func(domain.Payment) (domain.Payment, error)
+}
+
+type paymentPublisherStub struct {
+	event events.PaymentCompleted
+	err   error
+	calls int
+}
+
+func (s *paymentPublisherStub) PublishPaymentCompleted(_ context.Context, event events.PaymentCompleted) error {
+	s.event = event
+	s.calls++
+	return s.err
 }
 
 func (s *paymentRepoStub) GetByOrderID(context.Context, string) (domain.Payment, error) {
@@ -68,6 +81,49 @@ func TestAuthorizeReturnsExistingPayment(t *testing.T) {
 	}
 	if payment != existing {
 		t.Fatalf("Authorize() payment = %#v, want %#v", payment, existing)
+	}
+}
+
+func TestAuthorizePublishesPaymentCompletedEvent(t *testing.T) {
+	repo := &paymentRepoStub{getErr: ErrNotFound}
+	publisher := &paymentPublisherStub{}
+	service := NewService(repo, publisher)
+
+	payment, created, err := service.Authorize(context.Background(), AuthorizeInput{
+		OrderID:       "order-1",
+		Amount:        500,
+		CustomerEmail: "customer@example.com",
+	})
+	if err != nil {
+		t.Fatalf("Authorize() error = %v", err)
+	}
+	if !created {
+		t.Fatalf("Authorize() created = false, want true")
+	}
+	if publisher.calls != 1 {
+		t.Fatalf("PublishPaymentCompleted() calls = %d, want 1", publisher.calls)
+	}
+	if publisher.event.MessageID != "payment.completed:order-1" {
+		t.Fatalf("event.MessageID = %q, want payment.completed:order-1", publisher.event.MessageID)
+	}
+	if publisher.event.OrderID != payment.OrderID || publisher.event.Amount != payment.Amount {
+		t.Fatalf("event payment fields = %#v, want order_id=%s amount=%d", publisher.event, payment.OrderID, payment.Amount)
+	}
+	if publisher.event.CustomerEmail != "customer@example.com" {
+		t.Fatalf("event.CustomerEmail = %q, want customer@example.com", publisher.event.CustomerEmail)
+	}
+	if publisher.event.Status != string(domain.StatusAuthorized) {
+		t.Fatalf("event.Status = %q, want %s", publisher.event.Status, domain.StatusAuthorized)
+	}
+}
+
+func TestAuthorizeReturnsUnavailableWhenEventPublishFails(t *testing.T) {
+	repo := &paymentRepoStub{getErr: ErrNotFound}
+	service := NewService(repo, &paymentPublisherStub{err: errors.New("nats unavailable")})
+
+	_, _, err := service.Authorize(context.Background(), AuthorizeInput{OrderID: "order-1", Amount: 500})
+	if !errors.Is(err, ErrEventPublishFailed) {
+		t.Fatalf("Authorize() error = %v, want %v", err, ErrEventPublishFailed)
 	}
 }
 

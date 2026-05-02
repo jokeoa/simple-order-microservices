@@ -9,6 +9,7 @@ import (
 type Config struct {
 	HTTPAddr         string
 	GRPCAddr         string
+	NATSURL          string
 	PostgresDSN      string
 	PostgresMaxConns int32
 	ReadTimeout      time.Duration
@@ -44,6 +45,7 @@ func LoadConfig() (Config, error) {
 	return Config{
 		HTTPAddr:         env.String("PAYMENT_HTTP_ADDR", ":8081"),
 		GRPCAddr:         grpcAddr,
+		NATSURL:          env.String("NATS_URL", "nats://nats:4222"),
 		PostgresDSN:      postgresDSN,
 		PostgresMaxConns: int32(maxConns),
 		ReadTimeout:      readTimeout,

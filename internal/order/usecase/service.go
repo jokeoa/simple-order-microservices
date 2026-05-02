@@ -34,8 +34,9 @@ type PaymentAuthorizer interface {
 }
 
 type PaymentInput struct {
-	OrderID string
-	Amount  int64
+	OrderID       string
+	Amount        int64
+	CustomerEmail string
 }
 
 type PaymentResult struct {
@@ -162,7 +163,7 @@ func (s *Service) resumeExistingOrder(ctx context.Context, order domain.Order) (
 }
 
 func (s *Service) reconcilePayment(ctx context.Context, order domain.Order) (domain.Order, error) {
-	payment, err := s.payments.Authorize(ctx, PaymentInput{OrderID: order.ID, Amount: order.Amount})
+	payment, err := s.payments.Authorize(ctx, PaymentInput{OrderID: order.ID, Amount: order.Amount, CustomerEmail: order.CustomerID})
 	if err != nil {
 		if errors.Is(err, ErrPaymentUnavailable) {
 			return order, ErrPaymentUnavailable

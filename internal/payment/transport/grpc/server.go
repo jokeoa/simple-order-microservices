@@ -40,8 +40,9 @@ func (s *Server) ProcessPayment(ctx context.Context, request *paymentv1.PaymentR
 	}
 
 	payment, _, err := s.service.Authorize(ctx, usecase.AuthorizeInput{
-		OrderID: request.GetOrderId(),
-		Amount:  request.GetAmount(),
+		OrderID:       request.GetOrderId(),
+		Amount:        request.GetAmount(),
+		CustomerEmail: request.GetCustomerEmail(),
 	})
 	if err != nil {
 		return nil, mapError(err)
@@ -93,6 +94,8 @@ func mapError(err error) error {
 		return status.Error(codes.InvalidArgument, "invalid amount range")
 	case errors.Is(err, usecase.ErrNotFound):
 		return status.Error(codes.NotFound, "payment not found")
+	case errors.Is(err, usecase.ErrEventPublishFailed):
+		return status.Error(codes.Unavailable, "payment event broker unavailable")
 	default:
 		return status.Error(codes.Internal, "failed to process payment")
 	}

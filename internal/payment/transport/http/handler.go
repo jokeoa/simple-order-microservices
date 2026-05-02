@@ -24,8 +24,9 @@ type Handler struct {
 }
 
 type createPaymentRequest struct {
-	OrderID string `json:"order_id" validate:"required"`
-	Amount  int64  `json:"amount" validate:"gt=0"`
+	OrderID       string `json:"order_id" validate:"required"`
+	Amount        int64  `json:"amount" validate:"gt=0"`
+	CustomerEmail string `json:"customer_email"`
 }
 
 type paymentResponse struct {
@@ -96,8 +97,9 @@ func (h *Handler) createPayment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	payment, created, err := h.service.Authorize(r.Context(), usecase.AuthorizeInput{
-		OrderID: request.OrderID,
-		Amount:  request.Amount,
+		OrderID:       request.OrderID,
+		Amount:        request.Amount,
+		CustomerEmail: request.CustomerEmail,
 	})
 	if err != nil {
 		httpx.WriteError(w, http.StatusInternalServerError, "failed to authorize payment")

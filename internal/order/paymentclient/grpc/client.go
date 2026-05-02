@@ -49,8 +49,9 @@ func (c *Client) Authorize(ctx context.Context, input usecase.PaymentInput) (use
 
 	startedAt := time.Now()
 	response, err := c.client.ProcessPayment(callCtx, &paymentv1.PaymentRequest{
-		OrderId: input.OrderID,
-		Amount:  input.Amount,
+		OrderId:       input.OrderID,
+		Amount:        input.Amount,
+		CustomerEmail: input.CustomerEmail,
 	})
 	if err != nil {
 		grpcCode := status.Code(err)

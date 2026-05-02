@@ -18,6 +18,7 @@ import (
 	paymenthttp "github.com/jokeoa/simple-order-microservices/internal/payment/transport/http"
 	paymentusecase "github.com/jokeoa/simple-order-microservices/internal/payment/usecase"
 	"github.com/jokeoa/simple-order-microservices/internal/platform/grpcx"
+	"github.com/jokeoa/simple-order-microservices/internal/platform/messagebus"
 	"github.com/jokeoa/simple-order-microservices/internal/platform/metrics"
 	"github.com/jokeoa/simple-order-microservices/internal/platform/migrate"
 	"github.com/jokeoa/simple-order-microservices/internal/platform/postgres"
@@ -45,6 +46,18 @@ func main() {
 
 	validator := validate.New()
 	repository := paymentrepo.NewRepository(pool)
+	natsConn, err := messagebus.Connect(messagebus.NATSConfig{URL: cfg.NATSURL})
+	if err != nil {
+		log.Fatalf("connect nats: %v", err)
+	}
+	defer natsConn.Close()
+
+	js, err := messagebus.EnsurePaymentStream(ctx, natsConn)
+	if err != nil {
+		log.Fatalf("ensure payment stream: %v", err)
+	}
+	publisher := messagebus.NewPaymentCompletedPublisher(js)
+
 	registry := metrics.NewRegistry()
 	httpMetrics := metrics.NewHTTPServerMetrics("payment-service")
 	registry.MustRegister(httpMetrics.Collectors()...)
@@ -54,7 +67,7 @@ func main() {
 		metrics.NewPostgresPoolUtilizationCollector("payment-service", pool),
 	)
 
-	service := paymentusecase.NewService(repository)
+	service := paymentusecase.NewService(repository, publisher)
 	handler := paymenthttp.NewHandler(service, validator)
 	grpcHandler := paymentgrpc.NewServer(service)
 
@@ -109,6 +122,9 @@ func main() {
 	defer cancel()
 	_ = server.Shutdown(shutdownCtx)
 	grpcServer.GracefulStop()
+	if err := natsConn.Drain(); err != nil {
+		log.Printf("drain nats: %v", err)
+	}
 
 	fmt.Println("payment-service stopped")
 }
