@@ -180,7 +180,7 @@ func (c *PaymentCompletedConsumer) Run(ctx context.Context) error {
 		messages, err := subscription.Fetch(1, nats.Context(fetchCtx))
 		cancel()
 		if err != nil {
-			if errors.Is(err, nats.ErrTimeout) || errors.Is(err, context.Canceled) {
+			if errors.Is(err, nats.ErrTimeout) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 				continue
 			}
 			return fmt.Errorf("fetch payment completed: %w", err)
