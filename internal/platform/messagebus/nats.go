@@ -176,7 +176,9 @@ func (c *PaymentCompletedConsumer) Run(ctx context.Context) error {
 			return nil
 		}
 
-		messages, err := subscription.Fetch(1, nats.Context(ctx), nats.MaxWait(c.config.FetchWait))
+		fetchCtx, cancel := context.WithTimeout(ctx, c.config.FetchWait)
+		messages, err := subscription.Fetch(1, nats.Context(fetchCtx))
+		cancel()
 		if err != nil {
 			if errors.Is(err, nats.ErrTimeout) || errors.Is(err, context.Canceled) {
 				continue
